@@ -2,15 +2,58 @@ Vagrant.configure("2") do |config|
   RUNDECK_PKG="rundeckpro-enterprise-3.4.9.20211221-1"
   INSTANCE_IP="192.168.56.21"
   INSTANCE_PORT="4440"
+  DB_URL_STRING="" #If not empty, must set all DB_* variables
+  DB_DRIVER="org.h2.Driver"
+  DB_DRIVER_URL=""
+  DB_USER="sa"
+  DB_PASS=""
   
   config.vm.box = "generic/centos7"
   
   config.vm.network "private_network", ip: INSTANCE_IP
 
   config.vm.provision "shell", inline: <<-SHELL
+      setServerIp () {
+            local instanceIp="$1"
+            local instancePort="$2"
+            sed -i "/^grails.serverURL.*=/s/=.*$/=http:\\/\\/${instanceIp}:${instancePort}/" /etc/rundeck/rundeck-config.properties
+            sed -i "/^framework.server.name.*=/s/=.*$/= ${instanceIp}/" /etc/rundeck/framework.properties
+            sed -i "/^framework.server.hostname.*=/s/=.*$/= ${instanceIp}/" /etc/rundeck/framework.properties
+            sed -i "/^framework.server.url.*=/s/=.*$/= http:\\/\\/${instanceIp}:${instancePort}/" /etc/rundeck/framework.properties
+      }
+
+      setDatabase () {
+            local driver="$1"
+            local driverUrl="$2"
+            local dbUrl="$3"
+            local user="$4"
+            local pass="$5"
+
+            if [! -z "$driver"] && [ ! -z "$driverUrl" ] && [ ! -z "$dbUrl" ] && [ ! -z "$user"] && [ ! -z "$pass"]; then
+                  echo "SETTING CUSTOM DB..."
+                  mkdir /var/lib/rundeck/lib
+                  
+                  curl -L "$driverUrl" -o "/var/lib/rundeck/lib/$(tr '.' '-' <<< $driver).jar"
+
+                  sed -i "/^dataSource.url.*=/s/=.*$/= ${dbUrl}/" /etc/rundeck/rundeck-config.properties
+                  echo "dataSource.driverClassName=${driver}" >> /etc/rundeck/rundeck-config.properties
+                  echo "dataSource.username=${user}" >> /etc/rundeck/rundeck-config.properties
+                  echo "dataSource.password=${pass}" >> /etc/rundeck/rundeck-config.properties
+
+                  rm -f /etc/rundeck/bootstrap.yml
+            fi
+
+            echo "DB SETUP FINISHED"
+      }
+      
       instanceIp=#{INSTANCE_IP}
       instancePort=#{INSTANCE_PORT}
       rundeckPkg=#{RUNDECK_PKG}
+      dbUrlString=#{DB_URL_STRING}
+      dbDriver=#{DB_DRIVER}
+      dbDriverUrl=#{DB_DRIVER_URL}
+      dbUser=#{DB_USER}
+      dbPass=#{DB_PASS}
 
 repoData='[rundeckpro]
 name=rundeckpro
@@ -35,16 +78,14 @@ metadata_expire=300'
       while [[ $(tail -n 1 /var/log/rundeck/service.log) != *"Grails application running at http://"* ]]; do sleep 10; done
       service rundeckd stop
       echo "Setting host configuration..."
+      
+      setServerIp "$instanceIp" "$instancePort"
+      setDatabase "$dbDriver" "$dbDriverUrl" "$dbUrlString" "$dbUser" "$dbPass"
 
-      sed -i "/^grails.serverURL.*=/s/=.*$/=http:\\/\\/${instanceIp}:${instancePort}/" /etc/rundeck/rundeck-config.properties
-      sed -i "/^framework.server.name.*=/s/=.*$/= ${instanceIp}/" /etc/rundeck/framework.properties
-      sed -i "/^framework.server.hostname.*=/s/=.*$/= ${instanceIp}/" /etc/rundeck/framework.properties
-      sed -i "/^framework.server.url.*=/s/=.*$/= http:\\/\\/${instanceIp}:${instancePort}/" /etc/rundeck/framework.properties
       echo "Rundeck Server Configuration set."
       service rundeckd start
 
       echo "PACKAGE: ${rundeckPkg}"
-      echo "SERVER IP: ${instanceIp}"
-      echo "SERVER PORT: ${instancePort}"
+      echo "SERVER URL: http://${instanceIp}:${instancePort}"
    SHELL
 end
