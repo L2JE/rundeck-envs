@@ -21,20 +21,8 @@ Vagrant.configure("2") do |config|
   ######################################
   #### CUSTOM SERVER PROPERTIES SETUP
   ######################################
-  CUSTOM_PROPS_FILE = "rundeck-config.properties" #Will merge with instance's rundeck-config.properties
-  propKeys = Array.new
-  propValues = Array.new
-  if File.file?(CUSTOM_PROPS_FILE)
-      file = File.open(CUSTOM_PROPS_FILE)
-      props = file.read.gsub(/(^#.+)/, '').each_line.filter_map { |line| line.split('=',2) if !line.match /^$/ }
-
-      propKeys = Array.new
-      propValues = Array.new
-      props.each { |prop| 
-          propKeys.push(prop[0].chomp)
-          propValues.push(prop[1].chomp)
-      }
-  end
+  CONFIG_PROPS = getProperties("rundeck-config.properties") #Will merge with instance's rundeck-config.properties
+  FRAMEWORK_PROPS = getProperties("framework.properties") #Will merge with instance's framework.properties
 
   config.vm.provision "shell", inline: <<-SHELL
       overrideProps () {
@@ -105,8 +93,10 @@ Vagrant.configure("2") do |config|
       dbDriverUrl="#{DB_DRIVER_URL}"
       dbUser="#{DB_USER}"
       dbPass="#{DB_PASS}"
-      bashKeysStr="#{propKeys.join("\n")}"
-      bashValuesStr="#{propValues.join("\n")}"
+      configPropsKeys="#{CONFIG_PROPS[0].join("\n")}"
+      configPropsValues="#{CONFIG_PROPS[1].join("\n")}"
+      frameworkPropsKeys="#{FRAMEWORK_PROPS[0].join("\n")}"
+      frameworkPropsValues="#{FRAMEWORK_PROPS[1].join("\n")}"
 
 repoData='[rundeckpro]
 name=rundeckpro
@@ -134,7 +124,8 @@ metadata_expire=300'
       
       setServerIp "$instanceIp" "$instancePort"
       setDatabase "$dbDriver" "$dbDriverUrl" "$dbUrlString" "$dbUser" "$dbPass"
-      overrideProps "$bashKeysStr" "$bashValuesStr" "/etc/rundeck/rundeck-config.properties"
+      overrideProps "$configPropsKeys" "$configPropsValues" "/etc/rundeck/rundeck-config.properties"
+      overrideProps "$frameworkPropsKeys" "$frameworkPropsValues" "/etc/rundeck/framework.properties"
 
       echo "Rundeck Server Configuration set."
       service rundeckd start
@@ -142,4 +133,20 @@ metadata_expire=300'
       echo "PACKAGE: ${rundeckPkg}"
       echo "SERVER URL: http://${instanceIp}:${instancePort}"
    SHELL
+end
+
+def getProperties(propertiesFileName)
+      propKeys = Array.new
+      propValues = Array.new
+
+      if File.file?(propertiesFileName)
+            file = File.open(propertiesFileName)
+            props = file.read.gsub(/(^#.+)/, '').each_line.filter_map { |line| line.split('=',2) if !line.match /^$/ }
+      
+            props.each { |prop| 
+                propKeys.push(prop[0].chomp)
+                propValues.push(prop[1].chomp)
+            }
+      end
+      [propKeys, propValues]
 end
