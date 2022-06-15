@@ -25,11 +25,13 @@ Vagrant.configure("2") do |config|
       setDatabase () {
             local driver="$1"
             local driverUrl="$2"
-            local dbUrl="$3"
+            #One \ to skip ruby interpretation, Other \ to skip sed command's
+            #dbUrl=http:\/\/example.com/val1\&val2 for next sed command
+            local dbUrl=$(sed 's/\\\//\\\\\\//g' <<< "$3" | sed 's/&/\\\\&/g') #$(sed 's/\//\\\//g' <<< "$3" | sed 's/&/\\&/g')
             local user="$4"
             local pass="$5"
 
-            if [! -z "$driver"] && [ ! -z "$driverUrl" ] && [ ! -z "$dbUrl" ] && [ ! -z "$user"] && [ ! -z "$pass"]; then
+            if [ ! -z "$driver" ] && [ ! -z "$driverUrl" ] && [ ! -z "$dbUrl" ] && [ ! -z "$user" ] && [ ! -z "$pass" ]; then
                   echo "SETTING CUSTOM DB..."
                   mkdir /var/lib/rundeck/lib
                   
@@ -46,14 +48,14 @@ Vagrant.configure("2") do |config|
             echo "DB SETUP FINISHED"
       }
       
-      instanceIp=#{INSTANCE_IP}
-      instancePort=#{INSTANCE_PORT}
-      rundeckPkg=#{RUNDECK_PKG}
-      dbUrlString=#{DB_URL_STRING}
-      dbDriver=#{DB_DRIVER}
-      dbDriverUrl=#{DB_DRIVER_URL}
-      dbUser=#{DB_USER}
-      dbPass=#{DB_PASS}
+      instanceIp="#{INSTANCE_IP}"
+      instancePort="#{INSTANCE_PORT}"
+      rundeckPkg="#{RUNDECK_PKG}"
+      dbUrlString="#{DB_URL_STRING}"
+      dbDriver="#{DB_DRIVER}"
+      dbDriverUrl="#{DB_DRIVER_URL}"
+      dbUser="#{DB_USER}"
+      dbPass="#{DB_PASS}"
 
 repoData='[rundeckpro]
 name=rundeckpro
