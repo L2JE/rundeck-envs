@@ -21,7 +21,7 @@ Vagrant.configure("2") do |config|
   ######################################
   #### CUSTOM SERVER PROPERTIES SETUP
   ######################################
-  CUSTOM_PROPS_FILE = "rundeck-config.properties"
+  CUSTOM_PROPS_FILE = "rundeck-config.properties" #Will merge with instance's rundeck-config.properties
   propKeys = Array.new
   propValues = Array.new
   if File.file?(CUSTOM_PROPS_FILE)
