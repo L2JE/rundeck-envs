@@ -1,5 +1,8 @@
 Vagrant.configure("2") do |config|
-  RUNDECK_PKG="rundeckpro-enterprise-3.4.9.20211221-1"
+  ######################################
+  #### BASIC SERVER SETUP
+  ######################################    
+  RUNDECK_PKG="rundeckpro-enterprise-4.3.1.20220615-1"
   INSTANCE_IP="192.168.56.21"
   INSTANCE_PORT="4440"
   DB_URL_STRING="" #If not empty, must set all DB_* variables
@@ -7,12 +10,58 @@ Vagrant.configure("2") do |config|
   DB_DRIVER_URL=""
   DB_USER="sa"
   DB_PASS=""
-  
+
+  ######################################
+  #### VM SETUP
+  ######################################
   config.vm.box = "generic/centos7"
   
   config.vm.network "private_network", ip: INSTANCE_IP
 
+  ######################################
+  #### CUSTOM SERVER PROPERTIES SETUP
+  ######################################
+  CUSTOM_PROPS_FILE = "rundeck-config.properties" #Will merge with instance's rundeck-config.properties
+  propKeys = Array.new
+  propValues = Array.new
+  if File.file?(CUSTOM_PROPS_FILE)
+      file = File.open(CUSTOM_PROPS_FILE)
+      props = file.read.gsub(/(^#.+)/, '').each_line.filter_map { |line| line.split('=',2) if !line.match /^$/ }
+
+      propKeys = Array.new
+      propValues = Array.new
+      props.each { |prop| 
+          propKeys.push(prop[0].chomp)
+          propValues.push(prop[1].chomp)
+      }
+  end
+
   config.vm.provision "shell", inline: <<-SHELL
+      overrideProps () {
+            if [ ! -z "$1" ] && [ ! -z "$2" ] && [ ! -z "$3" ]; then
+                  local props=($1)
+                  set -o noglob
+                  local values=($2)
+                  set +o noglob
+                  local target="$3"
+                  echo "OVERRIDING PROPERTIES FILE: $target"
+
+                  i=0
+                  len=${#props[@]}
+                  while [ $i -lt $len ]; do
+
+
+                      local var=$(sed -i "/^${props[$i]}.*=/s/=.*$/=$(sed 's/\\//\\\\\\//g' <<< "${values[$i]}" | sed 's/&/\\\\&/g' )/w /dev/stdout" "$target") 
+
+                      if [ -z "$var" ]; then
+                          echo "  ADDING NOT EXISTING PROPERTY: ${props[$i]}"
+                          echo "${props[$i]}=${values[$i]}" >> "$target"
+                      fi
+                      let i++
+                  done
+            fi
+      }
+
       setServerIp () {
             local instanceIp="$1"
             local instancePort="$2"
@@ -56,6 +105,8 @@ Vagrant.configure("2") do |config|
       dbDriverUrl="#{DB_DRIVER_URL}"
       dbUser="#{DB_USER}"
       dbPass="#{DB_PASS}"
+      bashKeysStr="#{propKeys.join("\n")}"
+      bashValuesStr="#{propValues.join("\n")}"
 
 repoData='[rundeckpro]
 name=rundeckpro
@@ -83,6 +134,7 @@ metadata_expire=300'
       
       setServerIp "$instanceIp" "$instancePort"
       setDatabase "$dbDriver" "$dbDriverUrl" "$dbUrlString" "$dbUser" "$dbPass"
+      overrideProps "$bashKeysStr" "$bashValuesStr" "/etc/rundeck/rundeck-config.properties"
 
       echo "Rundeck Server Configuration set."
       service rundeckd start
