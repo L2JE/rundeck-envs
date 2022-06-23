@@ -1,0 +1,55 @@
+default: Set-Location : Illegal characters in path.
+    default: At C:\tmp\vagrant-shell.ps1:11 char:5
+    default: +     Set-Location -Path "C:
+    default: +     ~~~~~~~~~~~~~~~~~~~~~~
+    default:     + CategoryInfo          : InvalidArgument: (C:\Windows\system32\undeck:String) [Set-Location], ArgumentException
+    default:     + FullyQualifiedErrorId : ItemExistsArgumentError,Microsoft.PowerShell.Commands.SetLocationCommand
+    default: Set-Location : Cannot find path 'C:\Windows\system32\undeck' because it does not exist.
+    default: At C:\tmp\vagrant-shell.ps1:11 char:5
+    default: +     Set-Location -Path "C:
+    default: +     ~~~~~~~~~~~~~~~~~~~~~~
+    default:     + CategoryInfo          : ObjectNotFound: (C:\Windows\system32\undeck:String) [Set-Location], ItemNotFoundExcepti  
+    default:   on
+    default:     + FullyQualifiedErrorId : PathNotFound,Microsoft.PowerShell.Commands.SetLocationCommand
+    default: =rundeckpro-enterprise-4.0.0-20220322.war : The term '=rundeckpro-enterprise-4.0.0-20220322.war' is not recognized as 
+    default: the name of a cmdlet, function, script file, or operable program. Check the spelling of the name, or if a path was 
+    default: included, verify that the path is correct and try again.
+    default: At C:\tmp\vagrant-shell.ps1:16 char:5
+    default: +     ="rundeckpro-enterprise-4.0.0-20220322.war"
+    default: +     ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    default:     + CategoryInfo          : ObjectNotFound: (=rundeckpro-ent....0-20220322.war:String) [], CommandNotFoundException
+    default:     + FullyQualifiedErrorId : CommandNotFoundException
+    default: =0.0.0.0 : The term '=0.0.0.0' is not recognized as the name of a cmdlet, function, script file, or operable program. 
+    default: Check the spelling of the name, or if a path was included, verify that the path is correct and try again.
+    default: At C:\tmp\vagrant-shell.ps1:17 char:5
+    default: +     =0.0.0.0
+    default: +     ~~~~~~~~
+    default:     + CategoryInfo          : ObjectNotFound: (=0.0.0.0:String) [], CommandNotFoundException
+    default:     + FullyQualifiedErrorId : CommandNotFoundException
+
+    PS C:\tmp> cat vagrant-shell.ps1
+    $ruleName = "ALLOW TCP PORT 4440" 
+    New-NetFirewallRule -DisplayName "$ruleName" -Direction inbound -Profile Any -Action Allow -LocalPort 4440 -Protocol TCP 
+    Get-NetFirewallRule -DisplayName $ruleName
+
+    Set-ExecutionPolicy Bypass -Scope Process -Force; [System.Net.ServicePointManager]::SecurityProtocol = [System.Net.ServicePointManager]::SecurityProtocol -bor 3072; iex ((New-Object System.Net.WebClient).DownloadString('https://community.chocolatey.org/install.ps1'))
+
+    choco install openjdk8 -y
+    choco install wget -y
+
+    New-Item -ItemType "directory" -Path "C:" -Name "rundeck"
+    Set-Location -Path "C:\rundeck"
+    #echo "PRINTING CURRENT DIRECTORY"
+    #echo $PWD
+    Remove-Item -Recurse -Forcehttp://localhost:4440
+    ="rundeckpro-enterprise-4.0.0-20220322.war"
+    =0.0.0.0
+
+    #wget -O $rdeckPkgName https://packagecloud.io/pagerduty/rundeckpro/packages/java/com.rundeck.enterprise/$rdeckPkg/artifacts/$rdeckPkg/download -UseBasicParsing
+    #java -jar $rdeckPkg --installonly
+
+
+
+    Start-Process -FilePath "C:\Program Files\Openjdk\openjdk-8u322-b06\bin\java.exe" -ArgumentList "-jar -Dserver.port=8080 $RDECK_BASE\$rdeckPkg" -WorkingDirectory "$RDECK_BASE" -RedirectStandardOutput "$RDECK_BASE\server\logs\rundeck.log" -RedirectStandardError "$RDECK_BASE\server\log\rundeck.log"
+
+    $LocalTempDir = $env:TEMP; $ChromeInstaller = "ChromeInstaller.exe"; (new-object    System.Net.WebClient).DownloadFile('http://dl.google.com/chrome/install/375.126/chrome_installer.exe', "$LocalTempDir\$ChromeInstaller"); & "$LocalTempDir\$ChromeInstaller" /silent /install; $Process2Monitor =  "ChromeInstaller"; Do { $ProcessesFound = Get-Process | ?{$Process2Monitor -contains $_.Name} | Select-Object -ExpandProperty Name; If ($ProcessesFound) { "Still running: $($ProcessesFound -join ', ')" | Write-Host; Start-Sleep -Seconds 2 } else { rm "$LocalTempDir\$ChromeInstaller" -ErrorAction SilentlyContinue -Verbose } } Until (!$ProcessesFound)
