@@ -40,6 +40,17 @@ Vagrant.configure("2") do |config|
   config.vm.network "private_network", ip: INSTANCE_IP
 
   config.vm.provision "shell", privileged: "true", powershell_elevated_interactive: "true", inline: <<-SHELL
+    function SetUpServerIp {
+      Write-Host "Setting up server Ip..."
+      (Get-Content $RDECK_BASE\\server\\config\\rundeck-config.properties) -Replace('grails.serverURL=.*',"grails.serverURL=http://${instanceIp}:${instancePort}") | Set-Content $RDECK_BASE\\server\\config\\rundeck-config.properties
+      (Get-Content $RDECK_BASE\\server\\config\\rundeck-config.properties) -Replace('server.address=.*',"server.address=${instanceIp}") | Set-Content $RDECK_BASE\\server\\config\\rundeck-config.properties
+      (Get-Content $RDECK_BASE\\server\\config\\rundeck-config.properties) -Replace('server.port=.*',"server.port=${instancePort}") | Set-Content $RDECK_BASE\\server\\config\\rundeck-config.properties
+      (Get-Content $RDECK_BASE\\etc\\framework.properties) -Replace('framework.server.name.*=.*',"framework.server.name=${instanceIp}") | Set-Content $RDECK_BASE\\etc\\framework.properties
+      (Get-Content $RDECK_BASE\\etc\\framework.properties) -Replace('framework.server.hostname.*=.*',"framework.server.hostname=${instanceIp}") | Set-Content $RDECK_BASE\\etc\\framework.properties
+      (Get-Content $RDECK_BASE\\etc\\framework.properties) -Replace('framework.server.port.*=.*',"framework.server.port=${instancePort}") | Set-Content $RDECK_BASE\\etc\\framework.properties
+      (Get-Content $RDECK_BASE\\etc\\framework.properties) -Replace('framework.server.url.*=.*',"framework.server.url=http://${instanceIp}:${instancePort}") | Set-Content $RDECK_BASE\\etc\\framework.properties
+    }
+  
     $rdeckPkg="#{RUNDECK_PKG}"
     $instanceIp="#{INSTANCE_IP}"
     $instancePort="#{INSTANCE_PORT}"
@@ -71,31 +82,26 @@ Vagrant.configure("2") do |config|
 
     powershell -Command {
       param(
-        $processId,
-        $RDECK_BASE
+        $logFile,
+        $expectedString
       )
 
-      Get-Content $RDECK_BASE\\var\\logs\\service.log -Tail 1 -Wait | ForEach-Object {
+      Get-Content $logFile -Tail 1 -Wait | ForEach-Object {
         Write-Host $_
-        If ($_ -like 'Grails application running at http*') { 
-          Write-Host 'Rundeck first start success. Stopping...'
-          Stop-Process -id $processId -Force
+        If ($_ -like $expectedString) { 
           break
         }
       }
-    } -args $process.id, "$RDECK_BASE"
+    } -args "$RDECK_BASE\\var\\logs\\service.log", 'Grails application running at http*'
+    
+    Write-Host 'Rundeck first start success. Stopping...'
+    Stop-Process -id $process.id -Force
 
     Write-Host "Starting Server Configuration Setup..."
-    (Get-Content $RDECK_BASE\\server\\config\\rundeck-config.properties) -Replace('grails.serverURL=.*',"grails.serverURL=http://${instanceIp}:${instancePort}") | Set-Content $RDECK_BASE\\server\\config\\rundeck-config.properties
-    (Get-Content $RDECK_BASE\\server\\config\\rundeck-config.properties) -Replace('server.address=.*',"server.address=${instanceIp}") | Set-Content $RDECK_BASE\\server\\config\\rundeck-config.properties
-    (Get-Content $RDECK_BASE\\server\\config\\rundeck-config.properties) -Replace('server.port=.*',"server.port=${instancePort}") | Set-Content $RDECK_BASE\\server\\config\\rundeck-config.properties
-    (Get-Content $RDECK_BASE\\etc\\framework.properties) -Replace('framework.server.name.*=.*',"framework.server.name=${instanceIp}") | Set-Content $RDECK_BASE\\etc\\framework.properties
-    (Get-Content $RDECK_BASE\\etc\\framework.properties) -Replace('framework.server.hostname.*=.*',"framework.server.hostname=${instanceIp}") | Set-Content $RDECK_BASE\\etc\\framework.properties
-    (Get-Content $RDECK_BASE\\etc\\framework.properties) -Replace('framework.server.port.*=.*',"framework.server.port=${instancePort}") | Set-Content $RDECK_BASE\\etc\\framework.properties
-    (Get-Content $RDECK_BASE\\etc\\framework.properties) -Replace('framework.server.url.*=.*',"framework.server.url=http://${instanceIp}:${instancePort}") | Set-Content $RDECK_BASE\\etc\\framework.properties
+    SetUpServerIp
 
+    Write-Host "Rundeck Server Configuration set. Starting Rundeck..."
     $process = Start-Process $javaPath -ArgumentList "-jar $RDECK_BASE\\$rdeckPkg" -RedirectStandardOutput $RDECK_BASE\\var\\logs\\service.log -RedirectStandardError $RDECK_BASE\\var\\logs\\service.error.log -PassThru
-    Write-Host "Rundeck Server Configuration set."
     Write-Host "PACKAGE: ${rundeckPkg}"
     Write-Host "SERVER URL: http://${instanceIp}:${instancePort}"
     Write-Host "Starting Rundeck Process:"
