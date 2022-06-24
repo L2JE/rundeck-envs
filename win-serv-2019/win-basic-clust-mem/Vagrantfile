@@ -1,0 +1,105 @@
+# -*- mode: ruby -*-
+# vi: set ft=ruby :
+
+# All Vagrant configuration is done below. The "2" in Vagrant.configure
+# configures the configuration version (we support older styles for
+# backwards compatibility). Please don't change it unless you know what
+# you're doing.
+Vagrant.configure("2") do |config|
+  ######################################
+  #### BASIC SERVER SETUP
+  ######################################    
+  RUNDECK_PKG="rundeckpro-enterprise-4.3.1-20220615.war"
+  INSTANCE_IP="192.168.56.21"
+  INSTANCE_PORT="4440"
+  DB_URL_STRING="" #If not empty, must set all DB_* variables
+  DB_DRIVER="org.h2.Driver"
+  DB_DRIVER_URL=""
+  DB_USER="sa"
+  DB_PASS=""
+  
+  ######################################
+  #### VM SETUP
+  ######################################
+  required_plugins = %w(winrm winrm-fs winrm-elevated)
+
+  plugins_to_install = required_plugins.select { |plugin| not Vagrant.has_plugin? plugin }
+  
+  if not plugins_to_install.empty?
+    puts "Installing plugins: #{plugins_to_install.join(' ')}"
+    if system "vagrant plugin install #{plugins_to_install.join(' ')}"
+      exec "vagrant #{ARGV.join(' ')}"
+    else
+      abort "Installation of one or more plugins has failed. Aborting."
+    end
+  end  
+  
+  config.vm.box = "gusztavvargadr/windows-server" # From https://app.vagrantup.com/gusztavvargadr
+  config.vm.box_version = "1809.0.2112" # Windows Server 2019 Standard Desktop
+
+  config.vm.network "private_network", ip: INSTANCE_IP
+
+  config.vm.provision "shell", privileged: "true", powershell_elevated_interactive: "true", inline: <<-SHELL
+    $rdeckPkg="#{RUNDECK_PKG}"
+    $instanceIp="#{INSTANCE_IP}"
+    $instancePort="#{INSTANCE_PORT}"
+    $RDECK_BASE="C:\\rundeck"
+    New-NetFirewallRule -DisplayName "ALLOW TCP PORT 4440" -Direction inbound -Profile Any -Action Allow -LocalPort 4440 -Protocol TCP
+    Get-NetFirewallRule -DisplayName "ALLOW TCP PORT 4440"
+    
+    New-NetFirewallRule -DisplayName "ALLOW PING" -Direction inbound -Profile Any -Action Allow -Protocol ICMPv4
+    Get-NetFirewallRule -DisplayName "ALLOW PING"
+    
+
+    Set-ExecutionPolicy Bypass -Scope Process -Force; [System.Net.ServicePointManager]::SecurityProtocol = [System.Net.ServicePointManager]::SecurityProtocol -bor 3072; iex ((New-Object System.Net.WebClient).DownloadString('https://community.chocolatey.org/install.ps1'))
+
+    choco install openjdk8 -y
+    choco install vim -y
+    Start-Sleep -Seconds 1.5
+    
+    
+    New-Item -ItemType "directory" -Path "C:\\" -Name "rundeck"
+    Write-Host "Downloading $rdeckPkg..."
+    Invoke-WebRequest -Uri https://packagecloud.io/pagerduty/rundeckpro/packages/java/com.rundeck.enterprise/$rdeckPkg/artifacts/$rdeckPkg/download -OutFile $RDECK_BASE\\$rdeckPkg
+
+    mkdir $RDECK_BASE\\var
+    mkdir $RDECK_BASE\\var\\logs
+    $javaPath="$(Get-ChildItem -Path 'C:\\Program Files\\OpenJDK' -Filter 'openjdk-8*' | %{$_.FullName})\\bin\\java.exe"
+    $process = Start-Process $javaPath -ArgumentList "-jar $RDECK_BASE\\$rdeckPkg" -RedirectStandardOutput $RDECK_BASE\\var\\logs\\service.log -RedirectStandardError $RDECK_BASE\\var\\logs\\service.error.log -PassThru
+    Write-Host "Rundeck first start..."
+    Write-Host $process
+
+    powershell -Command {
+      param(
+        $processId,
+        $RDECK_BASE
+      )
+
+      Get-Content $RDECK_BASE\\var\\logs\\service.log -Tail 1 -Wait | ForEach-Object {
+        Write-Host $_
+        If ($_ -like 'Grails application running at http*') { 
+          Write-Host 'Rundeck first start success. Stopping...'
+          Stop-Process -id $processId -Force
+          break
+        }
+      }
+    } -args $process.id, "$RDECK_BASE"
+
+    Write-Host "Starting Server Configuration Setup..."
+    (Get-Content $RDECK_BASE\\server\\config\\rundeck-config.properties) -Replace('grails.serverURL=.*',"grails.serverURL=http://${instanceIp}:${instancePort}") | Set-Content $RDECK_BASE\\server\\config\\rundeck-config.properties
+    (Get-Content $RDECK_BASE\\server\\config\\rundeck-config.properties) -Replace('server.address=.*',"server.address=${instanceIp}") | Set-Content $RDECK_BASE\\server\\config\\rundeck-config.properties
+    (Get-Content $RDECK_BASE\\server\\config\\rundeck-config.properties) -Replace('server.port=.*',"server.port=${instancePort}") | Set-Content $RDECK_BASE\\server\\config\\rundeck-config.properties
+    (Get-Content $RDECK_BASE\\etc\\framework.properties) -Replace('framework.server.name.*=.*',"framework.server.name=${instanceIp}") | Set-Content $RDECK_BASE\\etc\\framework.properties
+    (Get-Content $RDECK_BASE\\etc\\framework.properties) -Replace('framework.server.hostname.*=.*',"framework.server.hostname=${instanceIp}") | Set-Content $RDECK_BASE\\etc\\framework.properties
+    (Get-Content $RDECK_BASE\\etc\\framework.properties) -Replace('framework.server.port.*=.*',"framework.server.port=${instancePort}") | Set-Content $RDECK_BASE\\etc\\framework.properties
+    (Get-Content $RDECK_BASE\\etc\\framework.properties) -Replace('framework.server.url.*=.*',"framework.server.url=http://${instanceIp}:${instancePort}") | Set-Content $RDECK_BASE\\etc\\framework.properties
+
+    $process = Start-Process $javaPath -ArgumentList "-jar $RDECK_BASE\\$rdeckPkg" -RedirectStandardOutput $RDECK_BASE\\var\\logs\\service.log -RedirectStandardError $RDECK_BASE\\var\\logs\\service.error.log -PassThru
+    Write-Host "Rundeck Server Configuration set."
+    Write-Host "PACKAGE: ${rundeckPkg}"
+    Write-Host "SERVER URL: http://${instanceIp}:${instancePort}"
+    Write-Host "Starting Rundeck Process:"
+    Write-Host $process
+    
+  SHELL
+end
