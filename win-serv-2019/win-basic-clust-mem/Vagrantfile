@@ -102,6 +102,20 @@ Vagrant.configure("2") do |config|
 
     Write-Host "Rundeck Server Configuration set. Starting Rundeck..."
     $process = Start-Process $javaPath -ArgumentList "-jar $RDECK_BASE\\$rdeckPkg" -RedirectStandardOutput $RDECK_BASE\\var\\logs\\service.log -RedirectStandardError $RDECK_BASE\\var\\logs\\service.error.log -PassThru
+    
+    powershell -Command {
+      param(
+        $logFile,
+        $expectedString
+      )
+
+      Get-Content $logFile -Tail 1 -Wait | ForEach-Object {
+        Write-Host $_
+        If ($_ -like $expectedString) { 
+          break
+        }
+      }
+    } -args "$RDECK_BASE\\var\\logs\\service.log", 'Grails application running at http*'
     Write-Host "PACKAGE: ${rundeckPkg}"
     Write-Host "SERVER URL: http://${instanceIp}:${instancePort}"
     Write-Host "Starting Rundeck Process:"
