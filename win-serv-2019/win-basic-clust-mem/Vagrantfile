@@ -39,6 +39,12 @@ Vagrant.configure("2") do |config|
 
   config.vm.network "private_network", ip: INSTANCE_IP
 
+  ######################################
+  #### CUSTOM SERVER PROPERTIES SETUP
+  ######################################
+  CONFIG_PROPS = getProperties("rundeck-config.properties") #Will merge with instance's rundeck-config.properties
+  FRAMEWORK_PROPS = getProperties("framework.properties") #Will merge with instance's framework.properties
+
   config.vm.provision "shell", privileged: "true", powershell_elevated_interactive: "true", inline: <<-SHELL
     function SetUpServerIp {
       Write-Host "Setting up server Ip..."
@@ -60,6 +66,42 @@ Vagrant.configure("2") do |config|
       Add-Content $RDECK_BASE\\server\\config\\rundeck-config.properties "`ndataSource.driverClassName=${dbDriver}"
       Add-Content $RDECK_BASE\\server\\config\\rundeck-config.properties "`ndataSource.username=${dbUser}"
       Add-Content $RDECK_BASE\\server\\config\\rundeck-config.properties "`ndataSource.password=${dbPass}"
+    }
+
+    function SetUpConfigProps {
+      $propValues = @(#{CONFIG_PROPS[0].map{ |prop| "\"" + prop + "\""}.join(",")})
+      $propKeys = @(#{CONFIG_PROPS[1].map{ |prop| "\"" + prop + "\""}.join(",")})
+      $configFileContent = Get-Content $RDECK_BASE\\server\\config\\rundeck-config.properties
+
+      for ($idx = 0; $idx -lt $propValues.count; $idx++){
+          $prop = $propValues[$idx]
+          $val = $propKeys[$idx]
+
+          if ( $configFileContent -like "${prop}*"){
+            $configFileContent = $configFileContent -Replace("${prop}=.*","${prop}=${val}")
+          } else{
+            $configFileContent = $configFileContent + "`n${prop}=${val}"
+          }
+      }
+      $configFileContent | Set-Content $RDECK_BASE\\server\\config\\rundeck-config.properties
+    }
+    
+    function SetUpFwProps {
+      $propValues = @(#{FRAMEWORK_PROPS[0].map{ |prop| "\"" + prop + "\""}.join(",")})
+      $propKeys = @(#{FRAMEWORK_PROPS[1].map{ |prop| "\"" + prop + "\""}.join(",")})
+      $configFileContent = Get-Content $RDECK_BASE\\etc\\framework.properties
+
+      for ($idx = 0; $idx -lt $propValues.count; $idx++){
+          $prop = $propValues[$idx]
+          $val = $propKeys[$idx]
+
+          if ( $configFileContent -like "${prop}*"){
+            $configFileContent = $configFileContent -Replace("${prop}=.*","${prop}=${val}")
+          } else{
+            $configFileContent = $configFileContent + "`n${prop}=${val}"
+          }
+      }
+      $configFileContent | Set-Content $RDECK_BASE\\etc\\framework.properties
     }
   
     $rdeckPkg="#{RUNDECK_PKG}"
@@ -116,6 +158,8 @@ Vagrant.configure("2") do |config|
     Write-Host "Starting Server Configuration Setup..."
     SetUpServerIp
     SetUpServerDB
+    SetUpConfigProps
+    SetUpFwProps
 
     Write-Host "Rundeck Server Configuration set. Starting Rundeck..."
     $process = Start-Process $javaPath -ArgumentList "-jar $RDECK_BASE\\$rdeckPkg" -RedirectStandardOutput $RDECK_BASE\\var\\logs\\service.log -RedirectStandardError $RDECK_BASE\\var\\logs\\service.error.log -PassThru
@@ -139,4 +183,20 @@ Vagrant.configure("2") do |config|
     Write-Host $process
     
   SHELL
+end
+
+def getProperties(propertiesFileName)
+  propKeys = Array.new
+  propValues = Array.new
+
+  if File.file?(propertiesFileName)
+        file = File.open(propertiesFileName)
+        props = file.read.gsub(/(^#.+)/, '').each_line.filter_map { |line| line.split('=',2) if !line.match /^$/ }
+  
+        props.each { |prop| 
+            propKeys.push(prop[0].chomp)
+            propValues.push(prop[1].chomp)
+        }
+  end
+  [propKeys, propValues]
 end
