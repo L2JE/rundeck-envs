@@ -14,7 +14,7 @@ Vagrant.configure("2") do |config|
   INSTANCE_PORT="4440"
   DB_URL_STRING="" #If not empty, must set all DB_* variables
   DB_DRIVER="org.h2.Driver"
-  DB_DRIVER_URL=""
+  DB_DRIVER_DOWNLOAD_URL=""
   DB_USER="sa"
   DB_PASS=""
   
@@ -50,10 +50,26 @@ Vagrant.configure("2") do |config|
       (Get-Content $RDECK_BASE\\etc\\framework.properties) -Replace('framework.server.port.*=.*',"framework.server.port=${instancePort}") | Set-Content $RDECK_BASE\\etc\\framework.properties
       (Get-Content $RDECK_BASE\\etc\\framework.properties) -Replace('framework.server.url.*=.*',"framework.server.url=http://${instanceIp}:${instancePort}") | Set-Content $RDECK_BASE\\etc\\framework.properties
     }
+
+    function SetUpServerDB {
+      Write-Host "Setting up DB configuration..."
+      $clientFileName = $dbDriver.replace(".","-")
+      Invoke-WebRequest -Uri $dbDriverUrl -OutFile ${RDECK_BASE}\\config\\lib\\${clientFileName}.jar
+
+      (Get-Content $RDECK_BASE\\server\\config\\rundeck-config.properties) -Replace('dataSource.url=.*',"dataSource.url=${dbUrlString}") | Set-Content $RDECK_BASE\\server\\config\\rundeck-config.properties
+      Add-Content $RDECK_BASE\\server\\config\\rundeck-config.properties "`ndataSource.driverClassName=${dbDriver}"
+      Add-Content $RDECK_BASE\\server\\config\\rundeck-config.properties "`ndataSource.username=${dbUser}"
+      Add-Content $RDECK_BASE\\server\\config\\rundeck-config.properties "`ndataSource.password=${dbPass}"
+    }
   
     $rdeckPkg="#{RUNDECK_PKG}"
     $instanceIp="#{INSTANCE_IP}"
     $instancePort="#{INSTANCE_PORT}"
+    $dbUrlString="#{DB_URL_STRING}"
+    $dbDriver="#{DB_DRIVER}"
+    $dbDriverUrl="#{DB_DRIVER_DOWNLOAD_URL}"
+    $dbUser="#{DB_USER}"
+    $dbPass="#{DB_PASS}"
     $RDECK_BASE="C:\\rundeck"
     New-NetFirewallRule -DisplayName "ALLOW TCP PORT 4440" -Direction inbound -Profile Any -Action Allow -LocalPort 4440 -Protocol TCP
     Get-NetFirewallRule -DisplayName "ALLOW TCP PORT 4440"
@@ -99,6 +115,7 @@ Vagrant.configure("2") do |config|
 
     Write-Host "Starting Server Configuration Setup..."
     SetUpServerIp
+    SetUpServerDB
 
     Write-Host "Rundeck Server Configuration set. Starting Rundeck..."
     $process = Start-Process $javaPath -ArgumentList "-jar $RDECK_BASE\\$rdeckPkg" -RedirectStandardOutput $RDECK_BASE\\var\\logs\\service.log -RedirectStandardError $RDECK_BASE\\var\\logs\\service.error.log -PassThru
