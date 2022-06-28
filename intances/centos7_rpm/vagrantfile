@@ -7,7 +7,7 @@ Vagrant.configure("2") do |config|
   INSTANCE_PORT="4440"
   DB_URL_STRING="" #If not empty, must set all DB_* variables
   DB_DRIVER="org.h2.Driver"
-  DB_DRIVER_URL=""
+  DB_DRIVER_DOWNLOAD_URL=""
   DB_USER="sa"
   DB_PASS=""
 
